@@ -1,0 +1,92 @@
+# .github/workflows/post_pin.yml
+#
+# Triggers:
+#   - Manual dispatch (with inputs)
+#   - Scheduled (daily at 09:00 UTC)
+#
+# Required GitHub Secrets:
+#   PINTEREST_ACCESS_TOKEN  — OAuth2 bearer token
+#   PINTEREST_BOARD_ID      — Target board ID
+
+name: Post Pinterest Pin
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "Pin title (max 100 chars)"
+        required: true
+        default: "Check out this Pin!"
+      description:
+        description: "Pin description (max 500 chars)"
+        required: false
+        default: ""
+      image_url:
+        description: "Public image URL"
+        required: true
+      board_id:
+        description: "Board ID (leave blank to use PINTEREST_BOARD_ID secret)"
+        required: false
+        default: ""
+
+  schedule:
+    # Every day at 09:00 UTC — edit cron to suit your needs
+    - cron: "0 9 * * *"
+
+jobs:
+  post-pin:
+    name: Post Pin to Pinterest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # -----------------------------------------------------------------------
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # -----------------------------------------------------------------------
+      - name: Validate token & board
+        env:
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_BOARD_ID: ${{ secrets.PINTEREST_BOARD_ID }}
+        run: |
+          python app.py validate \
+            --board-id "${{ github.event.inputs.board_id || '' }}"
+
+      # -----------------------------------------------------------------------
+      # Manual trigger — uses workflow_dispatch inputs
+      - name: Post Pin (manual trigger)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_BOARD_ID: ${{ secrets.PINTEREST_BOARD_ID }}
+        run: |
+          python app.py post \
+            --title       "${{ github.event.inputs.title }}" \
+            --description "${{ github.event.inputs.description }}" \
+            --image-url   "${{ github.event.inputs.image_url }}" \
+            --board-id    "${{ github.event.inputs.board_id }}"
+
+      # -----------------------------------------------------------------------
+      # Scheduled trigger — edit image URL / title to pull from a data source
+      - name: Post Pin (scheduled)
+        if: github.event_name == 'schedule'
+        env:
+          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
+          PINTEREST_BOARD_ID: ${{ secrets.PINTEREST_BOARD_ID }}
+        run: |
+          python app.py post \
+            --title       "Daily inspiration 🌟" \
+            --description "Posted automatically via GitHub Actions" \
+            --image-url   "https://picsum.photos/800/1200"
